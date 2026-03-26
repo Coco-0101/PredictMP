@@ -5,8 +5,11 @@ from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 import os
 import shutil
+import matplotlib.pyplot as plt
+from scipy.stats import gaussian_kde
 
-# ✅ 平行寫檔 function（移到外面）
+
+# 平行寫檔 function
 def write_group(args):
     chrom, group, output_base = args
     output_path = output_base / f"{chrom}_500.dosage.txt.gz"
@@ -16,7 +19,7 @@ def write_group(args):
         sep='\t', 
         index=False, 
         header=False, 
-        compression={'method': 'gzip', 'compresslevel': 1}  # ✅ 加速
+        compression={'method': 'gzip', 'compresslevel': 1}
     )
     return output_path.name
 
@@ -119,16 +122,6 @@ def run_predixcan():
     # Define paths for the command
     BASE_DIR = Path(__file__).resolve().parent
     
-    # cmd = [
-    #     "./PrediXcan.py",
-    #     "--predict",
-    #     "--weights", "./data/dosage/weight_db/en_Whole_Blood.db",
-    #     "--dosages", "../weight/package_setting/package_test/phenotype_file/N500",
-    #     "--samples", "./sample_file500.txt",
-    #     "--pheno", "./data/dosage/Whole_Blood/phenotype_file500.txt",
-    #     "--output_prefix", "results/N500"
-    # ]
-
     cmd = [
     "python",
     "./PrediXcan.py",
@@ -141,9 +134,54 @@ def run_predixcan():
     ]
     
     subprocess.run(cmd, check=True, cwd=BASE_DIR)
-    # print("\n[INFO] Run the following command in your terminal:")
-    # print(" ".join(cmd))
+
+
+def plot_density(file_path, output_path=None):
+    print(f"Loading: {file_path}")
+    pred = pd.read_csv(file_path, sep='\t')
+
+    genes = [
+        "ENSG00000145244.11",
+        "ENSG00000000457.13",
+        "ENSG00000001561.6",
+        "ENSG00000145020.15",
+        "ENSG00000144635.8",
+        "ENSG00000143740.14"
+    ]
+
+    plt.figure(figsize=(10, 8))
+
+    for i, gene in enumerate(genes, 1):
+        plt.subplot(3, 2, i)
+        data = pred[gene].dropna()
+
+        density = gaussian_kde(data)
+        x_vals = np.linspace(data.min(), data.max(), 1000)
+
+        plt.plot(x_vals, density(x_vals))
+        plt.title(gene)
+
+    plt.tight_layout()
+
+    if output_path:
+        plt.savefig(output_path)
+        print(f"Saved plot → {output_path}")
+    else:
+        plt.show()
+
+
+def analyze_results():
+    BASE_DIR = Path(__file__).resolve().parent
+    RESULTS_DIR = BASE_DIR.parent / "results"
+
+    file_500 = RESULTS_DIR / "N500_predicted_expression.txt"
+
+    plot_density(
+        file_500,
+        output_path=RESULTS_DIR / "density_N500.png"
+    )
 
 if __name__ == "__main__":
     generate_dosages()
     run_predixcan()
+    analyze_results()

@@ -1,0 +1,119 @@
+############################
+## PrediXcan prediction   ##
+############################
+### (1) Construct environment
+conda create --name myenv python=2.7
+source activate myenv
+conda install numpy
+source deactivate myenv
+
+### (2) Prediction
+# ./PrediXcan.py --predict --assoc --logistic \
+# --weights en_Whole_Blood.db \
+# --dosages phenotype_file \--samples samples.txt \--pheno phenotype_file.txt \
+# --output_prefix result
+
+python PrediXcan.py --predict --assoc --logistic \
+ --weights ./data/dosage/weight_db/en_Whole_Blood.db \
+ --dosages ./data/dosage/Whole_Blood/phenotype_file \
+ --samples sample_file500.txt \
+ --pheno phenotype_file500.txt \
+ --output_prefix ./result
+
+###########################################
+## PrediXcan weight models               ##
+###########################################
+#R
+#test code
+library("RSQLite")
+library(data.table)
+sqlite <- dbDriver("SQLite")
+# dbname <- "/Users/chgsh14414/Desktop/Mac/Predixcan/elastic_net_models/en_Whole_Blood.db"
+dbname <- "~/Predixcan_materials/elastic_net_models/en_Whole_Blood.db"
+db = dbConnect(sqlite,dbname)
+## list tables
+dbListTables(db)
+dbListFields(db, "weights")
+query <- function(...) dbGetQuery(db, ...)
+query('select * from weights limit 50')
+query('select * from MAF limit 50')
+weight_database <- query('select * from weights')
+weight_database <- data.table(weight_database)
+query('select count(*) from extra') #7572 genes
+
+##for all 49 tissues
+# setwd("/Users/chgsh14414/Desktop/Mac/Predixcan/elastic_net_models")
+setwd("~/Predixcan_materials/elastic_net_models")
+
+ped_temp <- list.files(pattern=".db")
+# ped_temp2 <- paste0("/Users/chgsh14414/Desktop/Mac/Predixcan/elastic_net_models/", ped_temp)
+ped_temp2 <- paste0("~/Predixcan_materials/elastic_net_models/", ped_temp)
+
+
+for (i in 1:49) {
+  assign(paste0("db",i) , dbConnect(sqlite,ped_temp2[i]))
+}
+
+pedfiles <- paste0("db", seq(1:49))
+for (i in 1:length(pedfiles)) {
+  query <- function(...) dbGetQuery(eval(parse(text = pedfiles[i])), ...)
+  assign(paste0("snp_sub",i) , data.table(query('select * from weights')))
+}
+
+db_name <- paste0("snp_sub", seq(1:49))
+
+## how many genes are available for each given tissue?
+gene_num <- c()
+for (i in 1:length(pedfiles)) {
+  query <- function(...) dbGetQuery(eval(parse(text = pedfiles[i])), ...)
+  gene_num[i] <- as.numeric(query('select count(*) from extra'))
+}
+gene_num
+tis_nam <- sub("^en_(.*?)\\.db$", "\\1", ped_temp)
+gene_num <- data.frame("tissue"=tis_nam, "gene_number"=gene_num)
+# write.csv(gene_num, "/Users/chgsh14414/Desktop/Mac/Predixcan/統整/PrediXcan統整完檔案/Num_of_genes_tissue.csv", row.names = F)
+write.csv(gene_num, "~/Predixcan_materials/Predixcan/data/Num_of_genes_tissue_betty.csv", row.names = F)
+
+mean(gene_num$gene_number) #5752
+range(gene_num$gene_number) #1642, 10012
+
+##merge these tissue weight models
+##first check the row for each tissue
+check_row <- c()
+for (j in 1:length(pedfiles)) {
+  check_row[j] <- nrow(eval(parse(text = db_name[j])))
+}
+max(check_row) ##309155
+which(check_row == max(check_row)) #35-Nerve_Tibial
+## Note: there are some snps with the same rsid, ref/eff alleles in the list (for predicting diff gene with diff weight)
+
+##change weight colnames
+tis_name <- c()
+for (k in 1:length(pedfiles)) {
+  tis_name[k] <- substr(ped_temp[k], regexpr("_", ped_temp[k])+1,regexpr(".db", ped_temp[k])-1)
+}
+
+for (k in 1:length(pedfiles)) {
+  setnames(eval(parse(text = db_name[k])), c("gene", "rsid", "varID",
+                                          "ref_allele", "eff_allele",tis_name[k]))
+}
+
+##combine data
+for (i in 1:length(pedfiles)) {
+  setkeyv(eval(parse(text = db_name[i])), c("gene", "rsid", "varID", "ref_allele", "eff_allele"))
+}
+
+comb <- merge.data.table(snp_sub1, snp_sub35, all = T)
+for (i in 2:34) {
+  comb <- merge.data.table(comb, eval(parse(text = db_name[i])), all = T)
+}
+
+for (i in 36:49) {
+  comb <- merge.data.table(comb, eval(parse(text = db_name[i])), all = T)
+}
+
+dim(comb) 5318682   54
+#table(is.na(comb$Adipose_Visceral_Omentum))
+##output
+fwrite(comb, "/Users/chgsh14414/Desktop/Mac/Predixcan/統整/PrediXcan統整完檔案/weight.csv")
+comb <- fread("/Users/chgsh14414/Desktop/Mac/Predixcan/weight.csv")

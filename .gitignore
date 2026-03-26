@@ -1,0 +1,17 @@
+# R
+.Rhistory
+.RData
+.rhistory
+
+# Python
+__pycache__/
+*.pyc
+
+# system
+.DS_Store
+
+# data
+data/
+*.csv
+*.tsv
+*.gz

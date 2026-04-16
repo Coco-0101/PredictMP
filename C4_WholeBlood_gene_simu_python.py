@@ -28,9 +28,8 @@ def generate_dosages():
 
     BASE_DIR = Path(__file__).resolve().parent
     DATA_DIR = BASE_DIR.parent / "data"
-    OUTPUT_BASE = (BASE_DIR.parent / "weight" / "package_setting" / "package_test" / "phenotype_file" / "N500")
-    OUTPUT_BASE.mkdir(parents=True, exist_ok=True)
-
+    OUTPUT_DIR = (BASE_DIR.parent / "weight" / "package_setting" / "package_test" / "phenotype_file" / "N500")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR = BASE_DIR.parent / "results"
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -60,7 +59,8 @@ def generate_dosages():
     """
 
     # Select necessary columns for PrediXcan dosage format
-    cols_to_keep = ['chr', 'rsid', 'POS', 'ref_allele', 'eff_allele', 'freq_eas']
+    # cols_to_keep = ['chr', 'rsid', 'POS', 'ref_allele', 'eff_allele', 'freq_eas'] # for EAS frequency
+    cols_to_keep = ['chr', 'rsid', 'POS', 'ref_allele', 'eff_allele', 'freq_afr'] # for AFR frequency
     blood_data = blood_data[cols_to_keep].copy()
     print(blood_data.columns) # Check column names and order
 
@@ -70,7 +70,9 @@ def generate_dosages():
     np.random.seed(123)
     n_snps = len(blood_data)
     n_samples = 500
-    p = blood_data['freq_eas'].values.reshape(-1, 1) # for EAS allele frequency
+    # p = blood_data['freq_eas'].values.reshape(-1, 1) # for EAS allele frequency
+    p = blood_data['freq_afr'].values.reshape(-1, 1) # for AFR allele frequency
+
 
     # Calculate genotype probabilities
     prob_0 = (1 - p)**2 # P(AA) = (1-p)^2
@@ -94,7 +96,7 @@ def generate_dosages():
     # Export by Chromosome with Gzip compression
     print("Writing GZipped dosage files...")
     # turn in to list of tuples for multiprocessing
-    groups = [(chrom, group, OUTPUT_BASE) 
+    groups = [(chrom, group, OUTPUT_DIR) 
               for chrom, group in dosage_df.groupby('chr')]
     # multiprocessing
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
@@ -103,13 +105,13 @@ def generate_dosages():
         print(f"Created: {name}")
 
     # Copy sample file
-    sample_file = BASE_DIR.parent / "data" / "sample_file500.txt"
+    sample_file = BASE_DIR.parent / "data" / "sample_file500_AFR.txt"
     print(f"Checking for sample file at: {sample_file}")
     if not sample_file.exists():
         print("Sample file NOT found, skipping copy.")
     else:
         try:
-            dest = OUTPUT_BASE / "sample_file500.txt"
+            dest = OUTPUT_DIR / "sample_file500_AFR.txt"
             shutil.copy(sample_file, dest)
             print(f"Sample file copied successfully → {dest}")
         except Exception as e:
@@ -128,7 +130,7 @@ def run_predixcan():
     "--predict",
     "--weights", "../data/dosage/weight_db/en_Whole_Blood.db",
     "--dosages", "../weight/package_setting/package_test/phenotype_file/N500",
-    "--samples", "./sample_file500.txt",
+    "--samples", "./sample_file500_AFR.txt",
     "--pheno", "../data/dosage/Whole_Blood/phenotype_file500.txt",
     "--output_prefix", "../results/N500"
     ]
@@ -178,10 +180,10 @@ def analyze_results():
 
     plot_density(
         file_500,
-        output_path=RESULTS_DIR / "density_N500.png"
+        output_path=RESULTS_DIR / "density_N500_AFR.png"
     )
 
 if __name__ == "__main__":
-    generate_dosages()
-    run_predixcan()
+    # generate_dosages()
+    # run_predixcan()
     analyze_results()

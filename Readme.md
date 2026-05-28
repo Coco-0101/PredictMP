@@ -44,8 +44,8 @@
 ### 準備所需檔案&R code撰寫
 - 整理預測基因所需SNP個數, mean及sd, across all 49 tissues
             
-##　C8_extra_nfe_pred
-###　以gnomAD database的NFE population來模擬預測全部49個tissues的基因表現量
+## C8_extra_nfe_pred
+### 以gnomAD database的NFE population來模擬預測全部49個tissues的基因表現量
 - 與EAS相同，模擬500個樣本
 - 檔案位置：Predixcan/統整/PrediXcan統整完檔案/dosage/nfe/results           
           

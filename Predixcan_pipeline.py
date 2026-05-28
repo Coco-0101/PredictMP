@@ -7,165 +7,153 @@ import os
 import shutil
 import logging
 from tqdm import tqdm
-import matplotlib.pyplot as plt
-from scipy.stats import gaussian_kde
+from functools import partial
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR.parent / "data"
-OUTPUT_DIR = BASE_DIR.parent / "data" /"dosage_all_tissues_AFR"
+
+POPULATION = "NFE"       # "EAS"/"AFR"/"NFE"
+N_SAMPLES  = 500
+RANDOM_SEED = 123
+
+_POP_CONFIG = {
+    "EAS": {
+        "freq_col":    "freq_eas",
+        "output_dir":  "dosage_EAS",
+        "weight_file": "weight.csv",
+        "sample_file": "sample_file500.txt",
+    },
+    "AFR": {
+        "freq_col":    "freq_afr",
+        "output_dir":  "dosage_AFR",
+        "weight_file": "weight.csv",
+        "sample_file": "sample_file500_AFR.txt",
+    },
+    "NFE": {
+        "freq_col":    "freq_nfe",
+        "output_dir":  "dosage_NFE",
+        "weight_file": "weight1.csv",
+        "sample_file": "sample_file500.txt",
+    },
+}
+
+if POPULATION not in _POP_CONFIG:
+    raise ValueError(f"POPULATION must be one of {list(_POP_CONFIG.keys())}，got:{POPULATION!r}")
+
+_cfg = _POP_CONFIG[POPULATION]
+
+FREQ_COL    = _cfg["freq_col"]
+WEIGHT_FILE = _cfg["weight_file"]
+SAMPLE_FILE = _cfg["sample_file"]
+
+BASE_DIR    = Path(__file__).resolve().parent
+DATA_DIR    = BASE_DIR.parent / "data"
+OUTPUT_DIR  = DATA_DIR / _cfg["output_dir"]
 RESULTS_DIR = BASE_DIR.parent / "results"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-N_SAMPLES = 500
-np.random.seed(123)
+np.random.seed(RANDOM_SEED)
 
-# ===============================
-# Logging
-# ===============================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
+logging.info(f"Pipeline:  POPULATION={POPULATION}  |  FREQ_COL={FREQ_COL}  |  N_SAMPLES={N_SAMPLES}")
 
-# ===============================
-# Step 1: Load data
-# ===============================
+
+# Load data
 def load_data():
     logging.info("Loading data...")
-    comb = pd.read_csv(DATA_DIR / "weight.csv")
+    comb   = pd.read_csv(DATA_DIR / WEIGHT_FILE)
     gnomad = pd.read_csv(DATA_DIR / "predixcan_gnomad_rsid_freq.csv")
     return comb, gnomad
 
 
-# ===============================
-# Step 2: 建 tissue models
-# ===============================
+# Build tissue models
 def build_tissue_models(comb):
     logging.info("Building tissue models...")
     tissue_models = {}
-
     for tis in comb.columns.tolist()[5:]:
         df = comb.dropna(subset=[tis])[
-            ['gene','rsid','varID','ref_allele','eff_allele', tis]
+            ['gene', 'rsid', 'varID', 'ref_allele', 'eff_allele', tis]
         ]
         tissue_models[tis] = df
-
     return tissue_models
 
 
-# ===============================
-# Step 3: merge gnomad
-# ===============================
+# Merge gnomad
 def merge_with_gnomad(args):
     tis, model, gnomad = args
-
     merged = pd.merge(
-        model,
-        gnomad,
-        on=['rsid','ref_allele','eff_allele'],
+        model, gnomad,
+        on=['rsid', 'ref_allele', 'eff_allele'],
         how='inner'
     )
-
-    # merged = merged[['chr','rsid','POS','ref_allele','eff_allele','freq_eas']] # for EAS frequency
-    merged = merged[['chr','rsid','POS','ref_allele','eff_allele','freq_afr']] # for AFR frequency
-
-
+    merged = merged[['chr', 'rsid', 'POS', 'ref_allele', 'eff_allele', FREQ_COL]]
     return tis, merged
 
 
-# ===============================
-# Step 4: 模擬 dosage（超快）
-# ===============================
+# Simulate dosage
 def simulate_dosage(args):
     tis, df = args
-
     n_snps = len(df)
-    # p = df['freq_eas'].values.reshape(-1,1) # for EAS frequency
-    p = df['freq_afr'].values.reshape(-1,1) # for AFR frequency
+    p = df[FREQ_COL].values.reshape(-1, 1)
 
+    prob0 = (1 - p) ** 2
+    prob1 = 2 * p * (1 - p)
 
-    prob0 = (1-p)**2
-    prob1 = 2*p*(1-p)
-
-    rand = np.random.rand(n_snps, N_SAMPLES)
-
+    rand   = np.random.rand(n_snps, N_SAMPLES)
     dosage = np.zeros((n_snps, N_SAMPLES), dtype=np.int8)
-    dosage[rand > prob0] = 1
-    dosage[rand > (prob0 + prob1)] = 2
+    dosage[rand > prob0]             = 1
+    dosage[rand > (prob0 + prob1)]   = 2
 
     dosage_df = pd.concat(
-        [df.reset_index(drop=True),
-         pd.DataFrame(dosage)],
+        [df.reset_index(drop=True), pd.DataFrame(dosage)],
         axis=1
     )
-
     dosage_df['chr'] = dosage_df['chr'].apply(
         lambda x: f"chr{x}" if not str(x).startswith("chr") else x
     )
-
     dosage_df = dosage_df.sort_values('chr')
-
-    dosage_df = dosage_df.drop_duplicates(
-        subset=['rsid','ref_allele','eff_allele']
-    )
-
+    dosage_df = dosage_df.drop_duplicates(subset=['rsid', 'ref_allele', 'eff_allele'])
     return tis, dosage_df
 
 
-# ===============================
-# Step 5: 寫檔
-# ===============================
+
+# Write files
 def write_tissue(args):
     tis, df = args
-
     TISSUE_DIR = OUTPUT_DIR / tis
     TISSUE_DIR.mkdir(parents=True, exist_ok=True)
 
     outputs = []
-
     for chrom, group in df.groupby('chr'):
         output_file = TISSUE_DIR / f"{tis}_{chrom}.dosage.txt.gz"
-
         group.to_csv(
-            output_file,
-            sep='\t',
-            index=False,
-            header=False,
-            compression={'method':'gzip','compresslevel':1}
+            output_file, sep='\t', index=False, header=False,
+            compression={'method': 'gzip', 'compresslevel': 1}
         )
-
         outputs.append(output_file.name)
 
-    sample_file = DATA_DIR / "sample_file500_AFR.txt"
-
-    if sample_file.exists():
-        dest = TISSUE_DIR / "sample_file500_AFR.txt"
-        shutil.copy(sample_file, dest)
+    sample_src = DATA_DIR / SAMPLE_FILE
+    if sample_src.exists():
+        shutil.copy(sample_src, TISSUE_DIR / SAMPLE_FILE)
 
     return tis, outputs
 
 
 
-# ===============================
-# 主：產生 dosage（全部 tissues）
-# ===============================
+# Generate dosage
 def generate_dosages_all_tissues():
-
     comb, gnomad = load_data()
     tissue_models = build_tissue_models(comb)
 
     logging.info("Merging with gnomad...")
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as exe:
         merged_results = list(tqdm(
-            exe.map(
-                merge_with_gnomad,
-                [(k,v,gnomad) for k,v in tissue_models.items()]
-            ),
+            exe.map(merge_with_gnomad, [(k, v, gnomad) for k, v in tissue_models.items()]),
             total=len(tissue_models)
         ))
-
     merged_dict = dict(merged_results)
 
     logging.info("Simulating dosage...")
@@ -174,7 +162,6 @@ def generate_dosages_all_tissues():
             exe.map(simulate_dosage, merged_dict.items()),
             total=len(merged_dict)
         ))
-
     dosage_dict = dict(dosage_results)
 
     logging.info("Writing files...")
@@ -188,97 +175,49 @@ def generate_dosages_all_tissues():
         logging.info(f"{tis}: {len(files)} files written")
 
 
-# ===============================
-# PrediXcan 單 tissue
-# ===============================
-def run_predixcan_single(tissue):
+
+# PrediXcan single tissue
+def run_predixcan_single(tissue, population=POPULATION):
+    pop_dir = RESULTS_DIR / population
+    pop_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "python",
-        "./PrediXcan.py",
+        "python", "./PrediXcan.py",
         "--predict",
-        "--weights", f"../../elastic_net_models/en_{tissue}.db",
-        "--dosages", f"../data/dosage_all_tissues_AFR/{tissue}",
+        "--weights",        f"../../elastic_net_models/en_{tissue}.db",
+        "--dosages",        f"../data/{_cfg['output_dir']}/{tissue}",
         "--dosages_prefix", f"{tissue}_chr",
-        "--samples", "./sample_file500_AFR.txt",
-        "--pheno", "../data/phenotype_file500.txt",
-        "--output_prefix", f"../results/{tissue}_AFR"
+        "--samples",        f"./{SAMPLE_FILE}",
+        "--pheno",          "../data/phenotype_file500.txt",
+        "--output_prefix",  str(pop_dir / f"{tissue}")
     ]
 
-    # subprocess.run(cmd, check=True, cwd=BASE_DIR)
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        cwd=BASE_DIR
-    )
-
-    print(f"\n===== {tissue} =====")
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=BASE_DIR)
+    print(f"\n===== {population} | {tissue} =====")
     print(result.stdout)
-
     return tissue
 
 
 
-# PrediXcan
-def run_predixcan_all_tissues():
-
-    comb = pd.read_csv(DATA_DIR / "weight.csv")
+# PrediXcan all tissues
+def run_predixcan_all_tissues(population=POPULATION):
+    comb    = pd.read_csv(DATA_DIR / WEIGHT_FILE)
     tissues = comb.columns.tolist()[5:]
 
-    logging.info("Running PrediXcan...")
+    logging.info(f"Running PrediXcan for {population}...")
+    func = partial(run_predixcan_single, population=population)
 
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as exe:
-        list(tqdm(
-            exe.map(run_predixcan_single, tissues),
-            total=len(tissues)
-        ))
+        list(tqdm(exe.map(func, tissues), total=len(tissues)))
 
     logging.info("PrediXcan finished")
 
 
-# plot (buggy, 待修正)
-def plot_density(file_path, output_path):
-    pred = pd.read_csv(file_path, sep='\t')
-
-    genes = pred.columns[1:7]
-
-    plt.figure(figsize=(10,8))
-
-    for i, gene in enumerate(genes,1):
-        plt.subplot(3,2,i)
-
-        data = pd.to_numeric(pred[gene], errors='coerce').dropna()
-
-        if len(data) < 2:
-            continue
-
-        density = gaussian_kde(data)
-        x = np.linspace(data.min(), data.max(), 1000)
-
-        plt.plot(x, density(x))
-        plt.title(gene)
-
-    plt.tight_layout()
-    plt.savefig(output_path)
-    plt.close()
-
-
-# ===============================
-def analyze_results_all():
-
-    logging.info("Analyzing results...")
-
-    for file in RESULTS_DIR.glob("*_predicted_expression.txt"):
-        output = RESULTS_DIR / f"{file.stem}.png"
-        plot_density(file, output)
-
-
-# ===============================
+# -------------------------------------------
 if __name__ == "__main__":
     generate_dosages_all_tissues()
-    run_predixcan_all_tissues()
-    analyze_results_all()
+    # run_predixcan_all_tissues()
+
 
 
 # Note

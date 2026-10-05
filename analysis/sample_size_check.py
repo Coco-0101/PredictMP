@@ -1,12 +1,24 @@
+"""
+Side analysis: does N=500 simulated subjects give the same Whole_Blood
+prediction distribution as N=1000/2000? (conclusion: 500 is enough)
+Reads the old gnomAD v2 frequency file predixcan_gnomad_rsid_freq.csv.
+"""
 import pandas as pd
 import numpy as np
 import subprocess
-from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 import os
 import shutil
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config import CODE_DIR, DATA_DIR, RESULTS_DIR, sample_file
+
+POP = "afr"   # population whose allele frequency is used
+OUTPUT_DIR = DATA_DIR / "sample_size_check" / "N500"   # simulated dosage files
 
 
 # 平行寫檔 function
@@ -26,11 +38,7 @@ def write_group(args):
 
 def generate_dosages():
 
-    BASE_DIR = Path(__file__).resolve().parent
-    DATA_DIR = BASE_DIR.parent / "data"
-    OUTPUT_DIR = (BASE_DIR.parent / "weight" / "package_setting" / "package_test" / "phenotype_file" / "N500")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    RESULTS_DIR = BASE_DIR.parent / "results"
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     snp_weight = pd.read_csv(DATA_DIR / "weight.csv")
@@ -59,8 +67,7 @@ def generate_dosages():
     """
 
     # Select necessary columns for PrediXcan dosage format
-    # cols_to_keep = ['chr', 'rsid', 'POS', 'ref_allele', 'eff_allele', 'freq_eas'] # for EAS frequency
-    cols_to_keep = ['chr', 'rsid', 'POS', 'ref_allele', 'eff_allele', 'freq_afr'] # for AFR frequency
+    cols_to_keep = ['chr', 'rsid', 'POS', 'ref_allele', 'eff_allele', f'freq_{POP}']
     blood_data = blood_data[cols_to_keep].copy()
     print(blood_data.columns) # Check column names and order
 
@@ -70,8 +77,7 @@ def generate_dosages():
     np.random.seed(123)
     n_snps = len(blood_data)
     n_samples = 500
-    # p = blood_data['freq_eas'].values.reshape(-1, 1) # for EAS allele frequency
-    p = blood_data['freq_afr'].values.reshape(-1, 1) # for AFR allele frequency
+    p = blood_data[f'freq_{POP}'].values.reshape(-1, 1)
 
 
     # Calculate genotype probabilities
@@ -105,14 +111,14 @@ def generate_dosages():
         print(f"Created: {name}")
 
     # Copy sample file
-    sample_file = BASE_DIR.parent / "data" / "sample_file500_AFR.txt"
-    print(f"Checking for sample file at: {sample_file}")
-    if not sample_file.exists():
+    src = sample_file(POP, 500)
+    print(f"Checking for sample file at: {src}")
+    if not src.exists():
         print("Sample file NOT found, skipping copy.")
     else:
         try:
-            dest = OUTPUT_DIR / "sample_file500_AFR.txt"
-            shutil.copy(sample_file, dest)
+            dest = OUTPUT_DIR / src.name
+            shutil.copy(src, dest)
             print(f"Sample file copied successfully → {dest}")
         except Exception as e:
             print(f"Error copying sample file: {e}")
@@ -121,21 +127,19 @@ def run_predixcan():
     """
     Instructions for running PrediXcan.py
     """
-    # Define paths for the command
-    BASE_DIR = Path(__file__).resolve().parent
     
     cmd = [
     "python",
-    "./PrediXcan.py",
+    str(CODE_DIR / "PrediXcan.py"),
     "--predict",
-    "--weights", "../data/dosage/weight_db/en_Whole_Blood.db",
-    "--dosages", "../weight/package_setting/package_test/phenotype_file/N500",
-    "--samples", "./sample_file500_AFR.txt",
-    "--pheno", "../data/dosage/Whole_Blood/phenotype_file500.txt",
-    "--output_prefix", "../results/N500"
+    "--weights", str(DATA_DIR / "dosage" / "weight_db" / "en_Whole_Blood.db"),
+    "--dosages", str(OUTPUT_DIR),
+    "--samples", sample_file(POP, 500).name,
+    "--pheno", str(DATA_DIR / "dosage" / "Whole_Blood" / "phenotype_file500.txt"),
+    "--output_prefix", str(RESULTS_DIR / "N500")
     ]
     
-    subprocess.run(cmd, check=True, cwd=BASE_DIR)
+    subprocess.run(cmd, check=True)
 
 
 def plot_density(file_path, output_path=None):
@@ -173,14 +177,11 @@ def plot_density(file_path, output_path=None):
 
 
 def analyze_results():
-    BASE_DIR = Path(__file__).resolve().parent
-    RESULTS_DIR = BASE_DIR.parent / "results"
-
     file_500 = RESULTS_DIR / "N500_predicted_expression.txt"
 
     plot_density(
         file_500,
-        output_path=RESULTS_DIR / "density_N500_AFR.png"
+        output_path=RESULTS_DIR / f"density_N500_{POP.upper()}.png"
     )
 
 if __name__ == "__main__":

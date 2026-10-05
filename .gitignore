@@ -15,3 +15,11 @@ data/
 *.csv
 *.tsv
 *.gz
+.Rproj.user
+.httr-oauth
+.quarto
+
+# Python packaging leftovers
+build/
+*.egg-info/
+dist/

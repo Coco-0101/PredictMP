@@ -6,7 +6,9 @@ comb <- fread("../data/weight.csv")
 pgno_rsinfo <- fread("../data/predixcan_gnomad_rsid_freq.csv")
 
 #把name有-的去掉
-names(comb)[c(24, 28)] <- c("Brain_Spinal_cord_cervical_c1", "Cells_EBV_transformed_lymphocytes")
+# names(comb)[c(24, 28)] <- c("Brain_Spinal_cord_cervical_c1", "Cells_EBV_transformed_lymphocytes")
+names(comb)[names(comb) == "Brain_Spinal_cord_cervical_c-1"] <- "Brain_Spinal_cord_cervical_c1"
+names(comb)[names(comb) == "Cells_EBV-transformed_lymphocytes"] <- "Cells_EBV_transformed_lymphocytes"
 tis_name <- names(comb)
 for (i in 6:length(tis_name)) {
   a <- tis_name[i]

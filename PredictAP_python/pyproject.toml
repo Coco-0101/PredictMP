@@ -1,0 +1,34 @@
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name        = "predictap"
+version     = "1.1.0"
+description = "Gene expression percentile ranking based on PrediXcan predictions"
+readme      = "README.md"
+license     = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.10"
+
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+
+[tool.setuptools]
+# Reference data lives outside the package (PREDICTAP_DATA_DIR); never ship parquet
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where   = ["."]
+include = ["PredictAP"]
+
+[tool.setuptools.exclude-package-data]
+PredictAP = ["data/*"]

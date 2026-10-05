@@ -1,5 +1,5 @@
-################ *↓先再次整合PrediXcan有用到ref/eff alleles位點↓* ################
-# setwd("C:\\Predixcan_materials\\Predixcan\\code")
+################ 先再次整合PrediXcan有用到ref/eff alleles位點 ################
+
 setwd("~/Predixcan_materials/Predixcan/code")
 
 library(data.table)
@@ -99,9 +99,11 @@ pgno_rsinfo <- fread("../data/predixcan_gnomad_rsid_info.csv")
 pgno_rsinfo$freq_nfe <- pgno_rsinfo$AC_nfe/pgno_rsinfo$AN_nfe
 pgno_rsinfo$freq_afr <- pgno_rsinfo$AC_afr/pgno_rsinfo$AN_afr
 pgno_rsinfo$freq_eas <- pgno_rsinfo$AC_eas/pgno_rsinfo$AN_eas
+
 ##刪掉分母為0的位點(代表沒有樣本) n=48
 sum(is.na(pgno_rsinfo$freq_eas)) ##48
 pgno_rsinfo <- pgno_rsinfo[!is.na(pgno_rsinfo$freq_eas),]
+
 ##nfe v.s. eas
 p <- (pgno_rsinfo$AC_nfe+pgno_rsinfo$AC_eas)/(pgno_rsinfo$AN_nfe+pgno_rsinfo$AN_eas)
 # unpooled Z-test / pooled proportion Z-test: choose one of way
@@ -112,6 +114,7 @@ Z_ne <- abs((pgno_rsinfo$freq_nfe - pgno_rsinfo$freq_eas)/sqrt((pgno_rsinfo$freq
 pgno_rsinfo$pval_ne <- pnorm(Z_ne, lower.tail = F)*2
 sum(is.na(pgno_rsinfo$pval_ne))
 View(pgno_rsinfo[is.na(pgno_rsinfo$pval_ne),])
+
 ### View in console
 # cat("Entries with NA p-values:\n")
 # print(pgno_rsinfo[is.na(pgno_rsinfo$pval_ne),])

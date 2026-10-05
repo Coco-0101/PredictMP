@@ -1,0 +1,10 @@
+# === lintr 設定檔 ===
+# 用 NULL 關閉不需要的檢查項，保留其餘預設規則
+linters: linters_with_defaults(
+    commented_code_linter = NULL,       # 關閉「移除被註解掉的程式碼」提醒
+    line_length_linter = NULL,          # 關閉「單行不超過 80 字」限制
+    trailing_whitespace_linter = NULL,  # 關閉「行尾多餘空白」提醒
+    trailing_blank_lines_linter = NULL, # 關閉「檔尾多餘空行」提醒
+    quotes_linter = NULL,               # 關閉「字串只能用雙引號」限制（允許單引號）
+    indentation_linter = NULL           # 關閉縮排檢查
+  )

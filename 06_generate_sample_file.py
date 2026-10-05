@@ -1,5 +1,6 @@
 """
-Generate sample_file for PrediXcan (NO HEADER)
+Step 06: generate sample_file for PrediXcan (NO HEADER)
+  -> sample_file500_{pop}.txt   (one per population)
 
 Parameters
 ----------
@@ -45,7 +46,7 @@ def generate_sample_file(
                 sample_id = f"{pop}{current_id}"
 
                 # FID IID cohort ancestry sex
-                line = f"{sample_id}\t{sample_id}\tSIM\t{pop}\t0\n"
+                line = f"{sample_id}\t{sample_id}\t{cohort_name}\t{pop}\t0\n"
                 f.write(line)
 
                 current_id += 1
@@ -53,25 +54,20 @@ def generate_sample_file(
     print(f"Sample file generated → {output_path}")
 
 
+N_SAMPLES = 500     # simulated subjects per population; must match 07
+
 if __name__ == "__main__":
-    BASE_DIR = Path(__file__).resolve().parent
-    DATA_DIR = BASE_DIR.parent / "data"
+    import argparse
+    from config import POPULATIONS, sample_file
 
-    OUTPUT_DIR = DATA_DIR 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    ap = argparse.ArgumentParser(description="Step 06: write PrediXcan sample files")
+    ap.add_argument("--pop", nargs="+", default=POPULATIONS, choices=POPULATIONS,
+                    help="populations (default: all)")
+    args = ap.parse_args()
 
-    # ===== 參數設定 =====
-    # populations = ["EAS", "AFR"]
-    # n_per_pop = 250   # 250 + 250 = 500
-    populations = ["AFR"]
-    n_per_pop = 500   # 250 + 250 = 500
-
-    output_file = OUTPUT_DIR / "sample_file500_AFR.txt"
-
-    # ===== 執行 =====
-    generate_sample_file(
-        output_path=output_file,
-        populations=populations,
-        n_per_pop=n_per_pop,
-        cohort_name="TWB"
-    )
+    for pop in args.pop:
+        generate_sample_file(
+            output_path=sample_file(pop, N_SAMPLES),
+            populations=[pop.upper()],
+            n_per_pop=N_SAMPLES,
+        )

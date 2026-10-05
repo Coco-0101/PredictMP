@@ -1,71 +1,50 @@
+"""
+Step 07: for one population, simulate N_SAMPLES genotypes from gnomAD allele
+frequencies (HWE) for every tissue model, then run PrediXcan --predict.
+  -> data/dosage/dosage_{POP}/{tissue}/{tissue}_chr*.dosage.txt.gz
+  -> results/{POP}/{tissue}_predicted_expression.txt
+
+    python 07_simulate_and_predict.py --pop eas
+    python 07_simulate_and_predict.py --pop all
+"""
 import pandas as pd
 import numpy as np
 import subprocess
-from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 import os
 import shutil
 import logging
+import sys
 from tqdm import tqdm
 from functools import partial
 
+from config import (
+    CODE_DIR, POPULATIONS, ELASTIC_NET_DIR,
+    WEIGHT_FILE, POPDIFF_FILE, PHENO_FILE, DOSAGE_DIR,
+    sample_file, pop_results_dir,
+)
 
-POPULATION = "NFE"       # "EAS"/"AFR"/"NFE"
-N_SAMPLES  = 500
-RANDOM_SEED = 123
+N_SAMPLES   = 500    # simulated subjects per population; must match 06
+RANDOM_SEED = 123    # each (population, tissue) gets its own stream, see simulate_dosage
 
-_POP_CONFIG = {
-    "EAS": {
-        "freq_col":    "freq_eas",
-        "output_dir":  "dosage_EAS",
-        "weight_file": "weight.csv",
-        "sample_file": "sample_file500.txt",
-    },
-    "AFR": {
-        "freq_col":    "freq_afr",
-        "output_dir":  "dosage_AFR",
-        "weight_file": "weight.csv",
-        "sample_file": "sample_file500_AFR.txt",
-    },
-    "NFE": {
-        "freq_col":    "freq_nfe",
-        "output_dir":  "dosage_NFE",
-        "weight_file": "weight1.csv",
-        "sample_file": "sample_file500.txt",
-    },
-}
-
-if POPULATION not in _POP_CONFIG:
-    raise ValueError(f"POPULATION must be one of {list(_POP_CONFIG.keys())}，got:{POPULATION!r}")
-
-_cfg = _POP_CONFIG[POPULATION]
-
-FREQ_COL    = _cfg["freq_col"]
-WEIGHT_FILE = _cfg["weight_file"]
-SAMPLE_FILE = _cfg["sample_file"]
-
-BASE_DIR    = Path(__file__).resolve().parent
-DATA_DIR    = BASE_DIR.parent / "data"
-OUTPUT_DIR  = DATA_DIR / _cfg["output_dir"]
-RESULTS_DIR = BASE_DIR.parent / "results"
-
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-
-np.random.seed(RANDOM_SEED)
+# Worker processes read the population from the environment; main() sets it.
+POPULATION = os.environ.get("PREDIXCAN_POP", "").lower()
+FREQ_COL    = f"freq_{POPULATION}"
+SAMPLE_FILE = sample_file(POPULATION, N_SAMPLES) if POPULATION else None
+OUTPUT_DIR  = DOSAGE_DIR / f"dosage_{POPULATION.upper()}"
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
-logging.info(f"Pipeline:  POPULATION={POPULATION}  |  FREQ_COL={FREQ_COL}  |  N_SAMPLES={N_SAMPLES}")
 
 
 # Load data
 def load_data():
     logging.info("Loading data...")
-    comb   = pd.read_csv(DATA_DIR / WEIGHT_FILE)
-    gnomad = pd.read_csv(DATA_DIR / "predixcan_gnomad_rsid_freq.csv")
+    comb   = pd.read_csv(WEIGHT_FILE)
+    gnomad = pd.read_csv(POPDIFF_FILE)
+    gnomad = gnomad.rename(columns={"CHROM": "chr"})
     return comb, gnomad
 
 
@@ -95,14 +74,17 @@ def merge_with_gnomad(args):
 
 # Simulate dosage
 def simulate_dosage(args):
-    tis, df = args
+    tis, df, tis_idx = args
+    # Seed per (population, tissue): independent across tissues/populations and
+    # reproducible regardless of which worker process runs the job.
+    rng = np.random.default_rng([RANDOM_SEED, POPULATIONS.index(POPULATION), tis_idx])
     n_snps = len(df)
     p = df[FREQ_COL].values.reshape(-1, 1)
 
     prob0 = (1 - p) ** 2
     prob1 = 2 * p * (1 - p)
 
-    rand   = np.random.rand(n_snps, N_SAMPLES)
+    rand   = rng.random((n_snps, N_SAMPLES))
     dosage = np.zeros((n_snps, N_SAMPLES), dtype=np.int8)
     dosage[rand > prob0]             = 1
     dosage[rand > (prob0 + prob1)]   = 2
@@ -129,37 +111,53 @@ def write_tissue(args):
     outputs = []
     for chrom, group in df.groupby('chr'):
         output_file = TISSUE_DIR / f"{tis}_{chrom}.dosage.txt.gz"
+        if output_file.exists():
+            outputs.append(output_file.name)
+            continue
         group.to_csv(
             output_file, sep='\t', index=False, header=False,
             compression={'method': 'gzip', 'compresslevel': 1}
         )
         outputs.append(output_file.name)
 
-    sample_src = DATA_DIR / SAMPLE_FILE
-    if sample_src.exists():
-        shutil.copy(sample_src, TISSUE_DIR / SAMPLE_FILE)
+    # PrediXcan.py looks for --samples inside the dosage directory
+    shutil.copy(SAMPLE_FILE, TISSUE_DIR / SAMPLE_FILE.name)
 
     return tis, outputs
 
 
 
 # Generate dosage
+def _dosage_exists(tis):
+    tis_dir = OUTPUT_DIR / tis
+    return tis_dir.is_dir() and any(tis_dir.glob("*.dosage.txt.gz"))
+
+
 def generate_dosages_all_tissues():
     comb, gnomad = load_data()
     tissue_models = build_tissue_models(comb)
 
+    pending = {k: v for k, v in tissue_models.items() if not _dosage_exists(k)}
+    n_skip = len(tissue_models) - len(pending)
+    if n_skip:
+        logging.info(f"Skipping {n_skip} tissues with existing dosage files")
+    if not pending:
+        logging.info("All dosage files already exist, nothing to do")
+        return
+
     logging.info("Merging with gnomad...")
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as exe:
         merged_results = list(tqdm(
-            exe.map(merge_with_gnomad, [(k, v, gnomad) for k, v in tissue_models.items()]),
-            total=len(tissue_models)
+            exe.map(merge_with_gnomad, [(k, v, gnomad) for k, v in pending.items()]),
+            total=len(pending)
         ))
     merged_dict = dict(merged_results)
+    tissue_index = {tis: i for i, tis in enumerate(tissue_models, start=1)}   # weight.csv column order
 
     logging.info("Simulating dosage...")
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as exe:
         dosage_results = list(tqdm(
-            exe.map(simulate_dosage, merged_dict.items()),
+            exe.map(simulate_dosage, [(tis, df, tissue_index[tis]) for tis, df in merged_dict.items()]),
             total=len(merged_dict)
         ))
     dosage_dict = dict(dosage_results)
@@ -178,21 +176,26 @@ def generate_dosages_all_tissues():
 
 # PrediXcan single tissue
 def run_predixcan_single(tissue, population=POPULATION):
-    pop_dir = RESULTS_DIR / population
+    pop_dir = pop_results_dir(population)
     pop_dir.mkdir(parents=True, exist_ok=True)
 
+    predict_file = pop_dir / f"{tissue}_predicted_expression.txt"
+    if predict_file.exists():
+        logging.info(f"Skipping {tissue} — result already exists")
+        return tissue
+
     cmd = [
-        "python", "./PrediXcan.py",
+        sys.executable, str(CODE_DIR / "PrediXcan.py"),
         "--predict",
-        "--weights",        f"../../elastic_net_models/en_{tissue}.db",
-        "--dosages",        f"../data/{_cfg['output_dir']}/{tissue}",
+        "--weights",        str(ELASTIC_NET_DIR / f"en_{tissue}.db"),
+        "--dosages",        str(OUTPUT_DIR / tissue),
         "--dosages_prefix", f"{tissue}_chr",
-        "--samples",        f"./{SAMPLE_FILE}",
-        "--pheno",          "../data/phenotype_file500.txt",
+        "--samples",        SAMPLE_FILE.name,
+        "--pheno",          str(PHENO_FILE),
         "--output_prefix",  str(pop_dir / f"{tissue}")
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=BASE_DIR)
+    result = subprocess.run(cmd, capture_output=True, text=True)
     print(f"\n===== {population} | {tissue} =====")
     print(result.stdout)
     return tissue
@@ -201,8 +204,7 @@ def run_predixcan_single(tissue, population=POPULATION):
 
 # PrediXcan all tissues
 def run_predixcan_all_tissues(population=POPULATION):
-    comb    = pd.read_csv(DATA_DIR / WEIGHT_FILE)
-    tissues = comb.columns.tolist()[5:]
+    tissues = pd.read_csv(WEIGHT_FILE, nrows=0).columns.tolist()[5:]
 
     logging.info(f"Running PrediXcan for {population}...")
     func = partial(run_predixcan_single, population=population)
@@ -213,11 +215,32 @@ def run_predixcan_all_tissues(population=POPULATION):
     logging.info("PrediXcan finished")
 
 
-# -------------------------------------------
-if __name__ == "__main__":
-    generate_dosages_all_tissues()
-    # run_predixcan_all_tissues()
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--pop", nargs="+", required=True, choices=POPULATIONS + ["all"])
+    pops = ap.parse_args().pop
+    pops = POPULATIONS if "all" in pops else pops
 
+    for pop in pops:
+        sf = sample_file(pop, N_SAMPLES)
+        if not sf.exists():
+            sys.exit(f"Missing {sf} — run 06_generate_sample_file.py --pop {pop}")
+        n_rows = sum(1 for line in open(sf) if line.strip())
+        if n_rows != N_SAMPLES:
+            sys.exit(f"{sf} has {n_rows} subjects but N_SAMPLES={N_SAMPLES} — rerun 06 with the same N")
+        print(f"\n{'='*50}\nRunning population: {pop.upper()}\n{'='*50}")
+        env = os.environ | {"PREDIXCAN_POP": pop}
+        subprocess.run([sys.executable, __file__, "--worker"], env=env, check=True)
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] == ["--worker"]:
+        logging.info(f"Pipeline:  POPULATION={POPULATION}  |  FREQ_COL={FREQ_COL}  |  N_SAMPLES={N_SAMPLES}")
+        generate_dosages_all_tissues()
+        run_predixcan_all_tissues()
+    else:
+        main()
 
 
 # Note

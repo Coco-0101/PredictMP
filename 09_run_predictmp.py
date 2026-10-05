@@ -87,7 +87,7 @@ def run(input_path: Path,
     except ImportError:
         sys.exit(
             "ERROR: PredictMP package not found.\n"
-            "       Install with:  cd PredictMP_python && pip install -e ."
+            "       Install with:  cd PredictMP_pkg && pip install -e ."
         )
 
     result = rankcal(data, tissue=tissue, population=population)

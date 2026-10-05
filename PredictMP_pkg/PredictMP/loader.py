@@ -14,7 +14,7 @@ import pandas as pd
 from pathlib import Path
 from functools import lru_cache
 
-# loader.py -> PredictMP -> PredictMP_python -> code -> PredictMP
+# loader.py -> PredictMP -> PredictMP_pkg -> code -> PredictMP
 _DATA_DIR    = Path(os.getenv("PREDICTMP_DATA_DIR",
                               Path(__file__).resolve().parents[3] / "data")).expanduser()
 _TISSUE_DIR  = _DATA_DIR / "tissue"

@@ -17,7 +17,7 @@ Project/
         ├── config.py            ← 所有路徑與族群都在這裡（參數在各程式開頭）
         ├── 01 … 09              主流程（照編號跑）
         ├── PrediXcan.py         PrediXcan 原始工具（07 會呼叫）
-        ├── PredictMP_python/    PredictMP Python 套件
+        ├── PredictMP_pkg/    PredictMP Python 套件
         ├── analysis/            側分析（不在主流程上）
         ├── archive/             舊版程式，保留備查
         └── Senior_R_code/       學長姐的 R 版本
@@ -46,7 +46,7 @@ Project/
 
 ```bash
 conda activate p_env                      # Python 3.14: pandas, numpy, scipy, pyarrow, tqdm, matplotlib, seaborn
-pip install -e PredictMP_python           # 搬過目錄後要重裝一次
+pip install -e PredictMP_pkg           # 搬過目錄後要重裝一次
 conda activate bcf_env                    # 只有步驟 02 需要（bcftools / bgzip / tabix）
 ```
 
@@ -114,16 +114,16 @@ res  = rankcal(data, tissue="x32", population="eas")            # x32 = Lung
 
 - 參考資料從 `PredictMP/data/{tissue,result_table,ks}/` 讀取，可用 `PREDICTMP_DATA_DIR` 改位置。
 - 組織代碼是 `x1`–`x49`，依 GTEx 組織名稱字母排序（`x1`=Adipose_Subcutaneous，`x32`=Lung，`x49`=Whole_Blood），完整對照見 `09_run_predictmp.py` 的 `TISSUE_INDEX`。
-- `PredictMP_python/PredictMP/data/` 裡有 1.3 GB 舊格式的 NFE parquet，loader 已經不讀它，打包時也已排除。確認不需要後可以刪掉。
+- `PredictMP_pkg/PredictMP/data/` 裡有 1.3 GB 舊格式的 NFE parquet，loader 已經不讀它，打包時也已排除。確認不需要後可以刪掉。
 
 ### 在其他主機使用
 
 套件只有程式碼，參考資料（約 12 GB）要另外下載，再用 `PREDICTMP_DATA_DIR` 指過去。
 
 ```bash
-# 1. 從 GitHub 安裝（private repo 用 ssh 網址：git+ssh://git@github.com/Coco-0101/PredictMP.git#subdirectory=PredictMP_python）
-pip install "git+https://github.com/Coco-0101/PredictMP.git#subdirectory=PredictMP_python"
-#    固定版本：在 .git 後面加 @<tag 或 commit>，例如 PredictMP.git@v1.1.0#subdirectory=PredictMP_python
+# 1. 從 GitHub 安裝（private repo 用 ssh 網址：git+ssh://git@github.com/Coco-0101/PredictMP.git#subdirectory=PredictMP_pkg）
+pip install "git+https://github.com/Coco-0101/PredictMP.git#subdirectory=PredictMP_pkg"
+#    固定版本：在 .git 後面加 @<tag 或 commit>，例如 PredictMP.git@v1.1.0#subdirectory=PredictMP_pkg
 
 # 2. 下載參考資料（rclone 設定見 PredictMP_GeneExprPredict-Web 的 README）
 rclone copy gdrive:PredictMP_GeneExprPredict-Web/reference_data ~/predictmp_reference -P

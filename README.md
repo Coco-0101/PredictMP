@@ -126,7 +126,11 @@ pip install "git+https://github.com/Coco-0101/PredictMP.git#subdirectory=Predict
 #    固定版本：在 .git 後面加 @<tag 或 commit>，例如 PredictMP.git@v1.1.0#subdirectory=PredictMP_pkg
 
 # 2. 下載參考資料（rclone 設定見 PredictMP_GeneExprPredict-Web 的 README）
-rclone copy gdrive:PredictMP_GeneExprPredict-Web/reference_data ~/predictmp_reference -P
+#    tissue/ 在雲端是每個族群一個 tar，下載後解開
+R=gdrive:PredictMP_GeneExprPredict-Web
+rclone copy $R/reference_data ~/predictmp_reference --include "ks/**" --include "result_table/**" -P
+rclone copy $R/reference_data_tar ~/predictmp_tar -P
+for f in ~/predictmp_tar/tissue_*.tar; do tar -xf "$f" -C ~/predictmp_reference; done && rm -r ~/predictmp_tar
 
 # 3. 告訴套件資料在哪（寫進 ~/.bashrc 就不用每次設定）
 export PREDICTMP_DATA_DIR=~/predictmp_reference

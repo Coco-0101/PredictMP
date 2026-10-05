@@ -82,6 +82,14 @@ a–d 的指令出自 2026-05 的筆記和 VCF header 裡的 `##bcftools_annotat
 PrediXcan 的 SNP 和 gnomAD 對 allele 時分四輪：直接對上 → ref/eff 對調（AF = 1−AF）→ 互補股 → 互補股加對調。
 接著對每個族群都和 NFE 做 two-proportion Z-test。`diff_index_{pop} = 1` 的條件是 p < 1e-8 **且** |Δfreq| > 0.05。
 
+> 門檻說明：Chan et al. 2024 論文寫的是 5×10⁻⁸，但學姊的原始程式（`Senior_R_code/C3_PopDiff_rsid.r` 第 123 行）實際用 `10^-8`，論文的「約 70% SNP 有族群差異」也是用 10⁻⁸ 算的。本流程沿用 10⁻⁸。`diff_index` 只用於統計，不影響 07 的模擬和網站的參考資料。
+
+### 08 KS test
+
+每個族群對 NFE、每個組織每個基因做兩樣本 KS test（scipy `ks_2samp`），p < 5×10⁻⁸ 為 `Sig.`，與論文及學姊套件（`result_table_v2.csv`）一致。
+兩族群模擬值完全相同時 p = 1，判為 `Nonsig.`（學姊的 R 程式把 p 為 NA 的情況算成 `Sig.`，論文沒有說明；新資料只有 2 個組織×基因組合屬於這種情況）。
+論文 Table S3 另外用「p < 1 ÷ 該組織基因數」做了補充分析（學姊的 `kstest_sign_num.csv`），沒有放進套件，本流程也沒有實作。
+
 ### 07 模擬
 
 在 HWE 假設下，以 gnomAD 的 `freq_{pop}` 抽 0/1/2 dosage，每個族群 500 人，然後用 `PrediXcan.py --predict` 跑完 49 個組織。

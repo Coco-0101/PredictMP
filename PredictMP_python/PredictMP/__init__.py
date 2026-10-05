@@ -1,5 +1,5 @@
 """
-PredictAP: Gene expression percentile ranking based on PrediXcan predictions.
+PredictMP: Gene expression percentile ranking based on PrediXcan predictions.
 """
 
 from .functions import ecdf_fn, rankcal

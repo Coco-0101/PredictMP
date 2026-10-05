@@ -1,5 +1,5 @@
 """
-Shared paths and populations for the PrediXcan / PredictAP pipeline.
+Shared paths and populations for the PrediXcan / PredictMP pipeline.
 Every numbered script does `from config import ...`.
 
 Root directory defaults to two levels above this file
@@ -40,7 +40,7 @@ UNMATCHED_FILE  = DATA_DIR / "gnomad_rsid_withoutinfo.csv"
 PHENO_FILE      = DATA_DIR / "phenotype_file500.txt"
 DOSAGE_DIR      = DATA_DIR / "dosage"                                       # dosage_{POP}/{tissue}/
 
-# Step 08 (PredictAP package data; loader.py reads the same dirs)
+# Step 08 (PredictMP package data; loader.py reads the same dirs)
 PKG_TISSUE_DIR  = DATA_DIR / "tissue"
 PKG_RT_DIR      = DATA_DIR / "result_table"
 PKG_KS_DIR      = DATA_DIR / "ks"

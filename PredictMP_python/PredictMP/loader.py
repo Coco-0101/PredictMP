@@ -1,11 +1,11 @@
 """
 loader.py
 ---------
-Internal data loader for PredictAP.
+Internal data loader for PredictMP.
 
 Reference data is read from PredictMP/data/{tissue,result_table,ks}/*.parquet,
 built by code/08_build_package_data.py. Override the location with env var
-PREDICTAP_DATA_DIR.
+PREDICTMP_DATA_DIR.
 """
 
 import os
@@ -14,8 +14,8 @@ import pandas as pd
 from pathlib import Path
 from functools import lru_cache
 
-# loader.py -> PredictAP -> PredictAP_python -> code -> PredictMP
-_DATA_DIR    = Path(os.getenv("PREDICTAP_DATA_DIR",
+# loader.py -> PredictMP -> PredictMP_python -> code -> PredictMP
+_DATA_DIR    = Path(os.getenv("PREDICTMP_DATA_DIR",
                               Path(__file__).resolve().parents[3] / "data")).expanduser()
 _TISSUE_DIR  = _DATA_DIR / "tissue"
 _RT_DIR      = _DATA_DIR / "result_table"

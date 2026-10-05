@@ -1,5 +1,5 @@
 """
-Step 08: build PredictAP reference data (read by PredictAP_python/loader.py)
+Step 08: build PredictMP reference data (read by PredictMP_python/loader.py)
 
 Step 1: Read SNP usage counts from SQLite databases
         -> Num_of_rs_used_x.csv, tissue_index.txt
@@ -182,7 +182,7 @@ def step3(result_tables: dict | None = None):
         print("WARNING: exceeds PyPI 60 MB recommended limit; consider splitting into a separate data package.")
 
     print("\nStep 3 done")
-    print("Install: cd PredictAP_python && pip install -e .")
+    print("Install: cd PredictMP_python && pip install -e .")
 
 
 # =============================================
@@ -259,7 +259,7 @@ def step4():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Step 08 — build PredictAP reference data (parquet files)"
+        description="Step 08 — build PredictMP reference data (parquet files)"
     )
     parser.add_argument(
         "--step", nargs="+", type=int,

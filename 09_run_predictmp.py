@@ -1,10 +1,10 @@
 """
-Step 09: run PredictAP on a PrediXcan output file.
+Step 09: run PredictMP on a PrediXcan output file.
 
 Workflow (Figure 1 & Figure 3 in paper):
   Step 1  Obtain predicted gene expression from PrediXcan (GTEx v8 elastic-net)
           for subjects of a target ancestry (e.g. EAS).
-  Step 2  Feed the PrediXcan output into PredictAP (rankcal).
+  Step 2  Feed the PrediXcan output into PredictMP (rankcal).
           Each gene's predicted expression is ranked against 500 reference
           values derived from the target ancestry's allele frequencies (gnomAD).
   Step 3  Evaluate output:
@@ -19,7 +19,7 @@ Workflow (Figure 1 & Figure 3 in paper):
 
 Usage
 -----
-    python 09_run_predictap.py [--tissue x32] [--population eas]
+    python 09_run_predictmp.py [--tissue x32] [--population eas]
                           [--input path/to/predicted_expression.txt]
                           [--output path/to/result.csv]
 """
@@ -68,7 +68,7 @@ def run(input_path: Path,
         tissue:     str,
         population: str,
         output_path: Path | None) -> pd.DataFrame:
-    """Execute the full PredictAP pipeline and return the result table."""
+    """Execute the full PredictMP pipeline and return the result table."""
 
     # ── Step 1: load PrediXcan output ─────────────────────────────────────────
     print(f"[Step 1] Reading PrediXcan output: {input_path.name}")
@@ -77,17 +77,17 @@ def run(input_path: Path,
     n_genes    = data.shape[1] - 2          # exclude FID, IID
     print(f"         {n_subjects} subjects  ×  {n_genes} genes")
 
-    # ── Step 2: run PredictAP ─────────────────────────────────────────────────
+    # ── Step 2: run PredictMP ─────────────────────────────────────────────────
     tissue_name = TISSUE_INDEX.get(tissue, tissue)
     print(f"[Step 2] rankcal(tissue={tissue!r} [{tissue_name}], "
           f"population={population!r})")
 
     try:
-        from PredictAP import rankcal
+        from PredictMP import rankcal
     except ImportError:
         sys.exit(
-            "ERROR: PredictAP package not found.\n"
-            "       Install with:  cd PredictAP_python && pip install -e ."
+            "ERROR: PredictMP package not found.\n"
+            "       Install with:  cd PredictMP_python && pip install -e ."
         )
 
     result = rankcal(data, tissue=tissue, population=population)
@@ -125,7 +125,7 @@ def run(input_path: Path,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PredictAP — evaluate PrediXcan predictions against a "
+        description="PredictMP — evaluate PrediXcan predictions against a "
                     "population reference (Chan et al. 2024)"
     )
     parser.add_argument(

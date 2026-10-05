@@ -1,7 +1,7 @@
 """
 functions.py
 ------------
-Core functions for PredictAP.
+Core functions for PredictMP.
 
 Output columns of rankcal() match the paper (Chan et al. 2024, Briefings in
 Bioinformatics 25(6) bbae549):
@@ -50,7 +50,7 @@ def rankcal(data: pd.DataFrame,
             tissue:     str = "x1",
             population: str = "nfe") -> pd.DataFrame:
     """
-    Compute gene expression percentile ranks — full PredictAP output.
+    Compute gene expression percentile ranks — full PredictMP output.
 
     Implements the algorithm described in Chan et al. (2024):
       1. Align user's PrediXcan output with the chosen reference population.
